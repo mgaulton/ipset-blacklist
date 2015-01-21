@@ -1,4 +1,11 @@
 #!/bin/bash
+
+#!/bin/sh
+if [[ -f /tmp/fwup.running ]] ; then
+    exit
+fi
+touch /tmp/fwup.running
+
 IP_TMP=/tmp/ip.tmp
 IP_BLACKLIST=/etc/ip-blacklist.conf
 IP_BLACKLIST_TMP=/tmp/ip-blacklist.tmp
@@ -14,6 +21,8 @@ BLACKLISTS=(
 "http://www.autoshun.org/files/shunlist.csv" # Autoshun Shun List
 "http://lists.blocklist.de/lists/all.txt" # blocklist.de attackers
 "http://www.stopforumspam.com/downloads/toxic_ip_cidr.txt" # StopForumSpam
+"http://feeds.dshield.org/block.txt"
+"http://core.nerdtools.co.uk/badbot/latest.txt"
 )
 for i in "${BLACKLISTS[@]}"
 do
@@ -28,10 +37,20 @@ sort $IP_BLACKLIST_TMP -n | uniq > $IP_BLACKLIST
 rm $IP_BLACKLIST_TMP
 wc -l $IP_BLACKLIST
 
-ipset create blacklist_tmp hash:net
+
+ipset -L blacklist  >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+	ipset create blacklist hash:net
+fi
+
+ipset -L blacklist_tmp  >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+	ipset create blacklist_tmp hash:net
+fi
+
 egrep -v "^#|^$" $IP_BLACKLIST | while IFS= read -r ip
 do
-        ipset add blacklist_tmp $ip
+        ipset  -exist add blacklist_tmp $ip
 done
 
 if [ -f $IP_BLACKLIST_CUSTOM ]; then
@@ -40,6 +59,7 @@ if [ -f $IP_BLACKLIST_CUSTOM ]; then
                 ipset add blacklist_tmp $ip
         done
 fi
-
+python rulecheck.py blacklist
 ipset swap blacklist blacklist_tmp
 ipset destroy blacklist_tmp
+rm -f /tmp/fwup.running
